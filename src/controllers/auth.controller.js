@@ -1,11 +1,14 @@
 import UserModel from "../models/user.model.js";
-import crypto from "crypto";
-import jwt from "jsonwebtoken";
-import config from "../config/config.js";
 import SessionModel from "../models/session.model.js";
 import { sendEmail } from "../services/email.service.js";
 import { otpModel } from "../models/otp.model.js";
-import { generateOtp, getOtpHtml, hashKey } from "../utils/utils.js";
+import {
+  generateOtp,
+  getOtpHtml,
+  hashKey,
+  generateJwtToken,
+  verifyJwtToken,
+} from "../utils/utils.js";
 
 export const register = async (req, res) => {
   const { username, email, password } = req.body;
@@ -30,7 +33,6 @@ export const register = async (req, res) => {
 
   const otp = generateOtp();
   const html = getOtpHtml(otp);
-
   const otpHash = hashKey(otp);
 
   await otpModel.create({
@@ -66,20 +68,16 @@ export const login = async (req, res) => {
   }
 
   const hashedPassword = hashKey(password);
-
   const isPasswordValid = hashedPassword === user.password;
   if (!isPasswordValid) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
-  const refreshToken = jwt.sign(
+  const refreshToken = generateJwtToken(
     {
       id: user._id,
     },
-    config.JWT_SECRET,
-    {
-      expiresIn: "7d",
-    },
+    "7d",
   );
 
   const refreshTokenHash = hashKey(refreshToken);
@@ -91,15 +89,12 @@ export const login = async (req, res) => {
     userAgent: req.get("User-Agent"),
   });
 
-  const accessToken = jwt.sign(
+  const accessToken = generateJwtToken(
     {
       id: user._id,
       sessionId: session._id,
     },
-    config.JWT_SECRET,
-    {
-      expiresIn: "15m",
-    },
+    "15m",
   );
 
   res.cookie("refreshToken", refreshToken, {
@@ -125,10 +120,9 @@ export const getMe = async (req, res) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  try {
-    const decoded = jwt.verify(token, config.JWT_SECRET);
-  } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+  const decoded = verifyJwtToken(token);
+  if (!decoded) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
   const user = await UserModel.findById(decoded.id);
   if (!user) {
@@ -151,7 +145,7 @@ export const refreshToken = async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+    const decoded = verifyJwtToken(refreshToken);
     const user = await UserModel.findById(decoded.id);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -169,24 +163,18 @@ export const refreshToken = async (req, res) => {
       return res.status(400).json({ message: "Invalid refresh token" });
     }
 
-    const newAccessToken = jwt.sign(
+    const newAccessToken = generateJwtToken(
       {
         id: user._id,
       },
-      config.JWT_SECRET,
-      {
-        expiresIn: "15m",
-      },
+      "15m",
     );
 
-    const newRefreshToken = jwt.sign(
+    const newRefreshToken = generateJwtToken(
       {
         id: user._id,
       },
-      config.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      },
+      "7d",
     );
 
     const newRefreshTokenHash = hashKey(newRefreshToken);
@@ -243,7 +231,7 @@ export const logoutAll = async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+    const decoded = verifyJwtToken(refreshToken);
     await SessionModel.updateMany(
       {
         user: decoded.id,
