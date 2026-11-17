@@ -5,7 +5,7 @@ import config from "../config/config.js";
 import SessionModel from "../models/session.model.js";
 import { sendEmail } from "../services/email.service.js";
 import { otpModel } from "../models/otp.model.js";
-import { generateOtp, getOtpHtml } from "../utils/utils.js";
+import { generateOtp, getOtpHtml, hashKey } from "../utils/utils.js";
 
 export const register = async (req, res) => {
   const { username, email, password } = req.body;
@@ -20,10 +20,7 @@ export const register = async (req, res) => {
     });
   }
 
-  const hashedPassword = crypto
-    .createHash("sha256")
-    .update(password)
-    .digest("hex");
+  const hashedPassword = hashKey(password);
 
   const user = await UserModel.create({
     username,
@@ -34,7 +31,7 @@ export const register = async (req, res) => {
   const otp = generateOtp();
   const html = getOtpHtml(otp);
 
-  const otpHash = hashOtp(otp);
+  const otpHash = hashKey(otp);
 
   await otpModel.create({
     email,
@@ -68,10 +65,7 @@ export const login = async (req, res) => {
       .json({ message: "User not verified. Please verify your email." });
   }
 
-  const hashedPassword = crypto
-    .createHash("sha256")
-    .update(password)
-    .digest("hex");
+  const hashedPassword = hashKey(password);
 
   const isPasswordValid = hashedPassword === user.password;
   if (!isPasswordValid) {
@@ -88,10 +82,7 @@ export const login = async (req, res) => {
     },
   );
 
-  const refreshTokenHash = crypto
-    .createHash("sha256")
-    .update(refreshToken)
-    .digest("hex");
+  const refreshTokenHash = hashKey(refreshToken);
 
   const session = await SessionModel.create({
     user: user._id,
@@ -166,10 +157,7 @@ export const refreshToken = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const refreshTokenHash = crypto
-      .createHash("sha256")
-      .update(refreshToken)
-      .digest("hex");
+    const refreshTokenHash = hashKey(refreshToken);
 
     const session = await SessionModel.findOne({
       user: user._id,
@@ -201,10 +189,7 @@ export const refreshToken = async (req, res) => {
       },
     );
 
-    const newRefreshTokenHash = crypto
-      .createHash("sha256")
-      .update(newRefreshToken)
-      .digest("hex");
+    const newRefreshTokenHash = hashKey(newRefreshToken);
 
     session.refreshTokenHash = newRefreshTokenHash;
     await session.save();
@@ -232,10 +217,7 @@ export const logout = async (req, res) => {
   }
 
   try {
-    const refreshTokenHash = crypto
-      .createHash("sha256")
-      .update(refreshToken)
-      .digest("hex");
+    const refreshTokenHash = hashKey(refreshToken);
     const session = await SessionModel.findOne({
       refreshTokenHash: refreshTokenHash,
       revoke: false,
@@ -282,7 +264,7 @@ export const logoutAll = async (req, res) => {
 
 export const verifyEmail = async (req, res) => {
   const { email, otp } = req.body;
-  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+  const otpHash = hashKey(otp);
 
   const otpRecord = await otpModel.findOne({ email, otpHash });
   if (!otpRecord) {

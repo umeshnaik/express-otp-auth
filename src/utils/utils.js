@@ -20,6 +20,6 @@ export const getOtpHtml = (otp) => {
   `;
 };
 
-export const hashOtp = (otp) => {
-  return crypto.createHash("sha256").update(otp).digest("hex");
+export const hashKey = (key) => {
+  return crypto.createHash("sha256").update(key).digest("hex");
 };
